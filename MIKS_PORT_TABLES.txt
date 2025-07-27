@@ -1,0 +1,52 @@
+CREATE TABLE `carouselimages` (
+  `image_id` int(11) NOT NULL AUTO_INCREMENT,
+  `project_id` int(11) NOT NULL,
+  `image_title` varchar(100) DEFAULT NULL,
+  `image_description` text DEFAULT NULL,
+  `image_path` varchar(255) NOT NULL,  -- Path or URL to the image
+  `display_order` int(11) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP(),
+  PRIMARY KEY (`image_id`),
+  KEY `project_id` (`project_id`),
+  CONSTRAINT `carouselimages_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `projects` (`project_id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=345 DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
+
+CREATE TABLE `mainimages` (
+  `image_id` int(11) NOT NULL AUTO_INCREMENT,
+  `project_id` int(11) NOT NULL,
+  `image_title` varchar(100) DEFAULT NULL,
+  `image_description` text DEFAULT NULL,
+  `image_path` varchar(255) NOT NULL,  -- Path or URL to the image
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP(),
+  PRIMARY KEY (`image_id`),
+  KEY `project_id` (`project_id`),
+  CONSTRAINT `mainimages_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `projects` (`project_id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=32 DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
+
+CREATE TABLE `projects` (
+  `project_id` int(11) NOT NULL AUTO_INCREMENT,
+  `project_name` varchar(100) NOT NULL,
+  `project_description` text DEFAULT NULL,
+  `project_location` varchar(255) DEFAULT NULL,
+  `project_date` date DEFAULT NULL,
+  `project_type` varchar(100) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP(),
+  `documentation` blob DEFAULT NULL,
+  PRIMARY KEY (`project_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=35 DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
+
+CREATE TABLE `resume` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) NOT NULL,
+  `bio` text NOT NULL,
+  `education` varchar(255) NOT NULL,
+  `experience` varchar(255) NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
+
+CREATE TABLE `users` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `username` varchar(255) NOT NULL,
+  `password` varchar(255) NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
