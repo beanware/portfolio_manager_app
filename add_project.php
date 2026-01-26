@@ -28,14 +28,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $sql = "INSERT INTO mainimages (project_id, image_title, image_description, image_path) VALUES (?, ?, ?, ?)";
                 $stmt = $connection->prepare($sql);
                 $stmt->bind_param("isss", $projectId, $mainImageTitle, $mainImageDescription, $mainImagePath);
-                $stmt->execute();
-            } else {
-                $message = "Failed to upload main image.";
+                if (!$stmt->execute()) {
+                    $message .= "Error inserting main image details into 'mainimages' table: " . $stmt->error . ". ";
+                }
             }
         }
 
         // Handle carousel images upload
         if (!empty($_FILES['carousel_images']['name'][0])) {
+            error_log("Attempting to handle carousel images upload for projectId: " . $projectId); // Add log
             $carouselImages = $_FILES['carousel_images'];
             $numFiles = count($carouselImages['name']);
             $carouselData = [];
@@ -46,34 +47,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $carouselData[] = [
                         'project_id' => $projectId,
                         'image_title' => $carouselImages['name'][$i],
+                        // UI Note: Only one input field is provided for carousel_image_descriptions.
+                        // So, $carousel_image_descriptions[$i] will be null for subsequent images.
                         'image_description' => $_POST['carousel_image_descriptions'][$i] ?? null,
                         'image_path' => $carouselImagePath,
                         'display_order' => $i + 1
                     ];
+                    error_log("Carousel image uploaded: " . $carouselImagePath); // Add log
+                } else {
+                    $uploadError = "Failed to upload carousel image '" . $carouselImages['name'][$i] . "'. PHP Error Code: " . $carouselImages['error'][$i] . ". ";
+                    $message .= $uploadError;
+                    error_log($uploadError . " Details: " . print_r($carouselImages['error'], true)); // Add log
                 }
             }
 
-            $sql = "INSERT INTO carouselimages (project_id, image_title, image_description, image_path, display_order) VALUES (?, ?, ?, ?, ?)";
-            $stmt = $connection->prepare($sql);
-            foreach ($carouselData as $data) {
-                $stmt->bind_param("isssi", $data['project_id'], $data['image_title'], $data['image_description'], $data['image_path'], $data['display_order']);
-                $stmt->execute();
+            if (!empty($carouselData)) { // Check if any images were successfully prepared for insert
+                error_log("Preparing to insert " . count($carouselData) . " carousel images."); // Add log
+                $sql = "INSERT INTO carouselimages (project_id, image_title, image_description, image_path, display_order) VALUES (?, ?, ?, ?, ?)";
+                $stmt = $connection->prepare($sql);
+                if (!$stmt) {
+                    error_log("Carousel image INSERT statement preparation failed: " . $connection->error); // Add log
+                    $message .= "Database error: Could not prepare carousel image insert statement. ";
+                } else {
+                    foreach ($carouselData as $data) {
+                        $bp_projectId = $data['project_id'];
+                        $bp_imageTitle = $data['image_title'];
+                        $bp_imageDescription = $data['image_description'];
+                        $bp_imagePath = $data['image_path'];
+                        $bp_displayOrder = $data['display_order'];
+                        $stmt->bind_param("isssi", $bp_projectId, $bp_imageTitle, $bp_imageDescription, $bp_imagePath, $bp_displayOrder);
+                        if (!$stmt->execute()) {
+                            $insertError = "Error inserting carousel image details for '" . $data['image_title'] . "' into 'carouselimages' table: " . $stmt->error . ". ";
+                            $message .= $insertError;
+                            error_log($insertError); // Add log
+                        } else {
+                            error_log("Carousel image inserted: " . $data['image_title']); // Add log
+                        }
+                    }
+                }
+            } else {
+                error_log("No carousel images were successfully moved for project: " . $projectId); // Add log
             }
+        } else {
+            error_log("No carousel images selected for project: " . $projectId); // Add log
         }
 
-        // Handle PDF Documentation upload
-        if (!empty($_FILES['documentation']['tmp_name'])) {
-            $uploadDir = 'uploads/docs';
-            $uploadFile = $uploadDir . basename($_FILES['documentation']['name']);
-            if (move_uploaded_file($_FILES['documentation']['tmp_name'], $uploadFile)) {
-                $sql = "UPDATE projects SET documentation = ? WHERE project_id = ?";
-                $stmt = $connection->prepare($sql);
-                $stmt->bind_param("si", $uploadFile, $projectId);
-                $stmt->execute();
-            } else {
-                $message = "Failed to upload documentation.";
-            }
-        }
 
         $message = "Project and images added successfully";
     } else {
@@ -254,12 +272,10 @@ $connection->close();
         <label for="carousel_image_descriptions">Carousel Image Descriptions:</label>
         <input type="text" name="carousel_image_descriptions[]" placeholder="Image description">
 
-        <label for="documentation">Documentation (PDF):</label>
-        <input type="file" id="documentation" name="documentation" accept="application/pdf">
-
         <button type="submit">Add Project</button>
     </form>
 
     <div class="projects"></div>
 </body>
 </html>
+

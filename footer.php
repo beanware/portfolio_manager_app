@@ -9,7 +9,7 @@
             <a href="#" target="_blank" class="social-icon linkedin w-8 h-8 rounded-full bg-white bg-cover transition-all duration-300 ease-in-out transform hover:scale-110 hover:bg-[rgba(255,255,255,0.2)]" style="background-image: url('./svg/linkedin.svg');"></a>
         </div>
             
-    <p class="m-0 text-sm text-center">&copy; 2022 Triad Software. All rights reserved.</p>
+    <p class="m-0 text-sm text-center">&copy; 2024 Beanware. All rights reserved.</p>
         
     </div>
 </footer>
@@ -85,3 +85,4 @@
         color: #25D366; /* This will remain as it is since it's a color */
     }
 </style>
+</main></body></html>

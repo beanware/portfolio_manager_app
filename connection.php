@@ -1,8 +1,8 @@
 <?php
 $servername = getenv('DB_SERVER') ?: "localhost";
-$username = getenv('DB_USER') ?: "vmyeemun_domuka";
-$password = getenv('DB_PASS') ?: "661942.do";
-$dbname = getenv('DB_NAME') ?: "vmyeemun_miks_port";
+$username = getenv('DB_USER') ?: "root";
+$password = getenv('DB_PASS') ?: "";
+$dbname = getenv('DB_NAME') ?: "miks_port";
 
 // Initialize MySQLi connection
 $connection = new mysqli($servername, $username, $password, $dbname);
@@ -10,7 +10,7 @@ $connection = new mysqli($servername, $username, $password, $dbname);
 // Check connection
 if ($connection->connect_error) {
     error_log("Connection failed: " . $connection->connect_error); // Log error
-    die("Connection failed. Please try again later."); // Generic error message
+    die("Connection failed: " . $connection->connect_error); // Display specific error message
 }
 
 // Set charset to utf8mb4 for wider character support
@@ -22,7 +22,7 @@ try {
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 } catch (PDOException $e) {
     error_log('Connection failed: ' . $e->getMessage()); // Log error
-    die('Connection failed. Please try again later.'); // Generic error message
+    die('Connection failed: ' . $e->getMessage()); // Display specific error message
 }
 
 ?>

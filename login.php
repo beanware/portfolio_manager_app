@@ -11,17 +11,18 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $password = trim($_POST['password']); // Get password from form
 
     // Prepare SQL query to fetch user by username
-    $stmt = $conn->prepare("SELECT id, username, password FROM users WHERE username = ?");
+    $stmt = $conn->prepare("SELECT user_id, username, password_hash, role, display_name FROM users WHERE username = ?");
     $stmt->bind_param("s", $username);
     $stmt->execute();
-    $stmt->bind_result($id, $user_name, $hashed_password);
+    $stmt->bind_result($user_id, $user_name, $hashed_password, $role, $display_name);
     $stmt->fetch();
 
     // Verify password and set session variables
     if (password_verify($password, $hashed_password)) {
-        $_SESSION['user_id'] = $id;
+        $_SESSION['user_id'] = $user_id;
         $_SESSION['username'] = $user_name;
-        $_SESSION['role'] = 'admin'; // Hardcoded role for admin
+        $_SESSION['role'] = $role;
+        $_SESSION['display_name'] = $display_name;
         
         header("Location: index.php"); // Redirect to home page
         exit();

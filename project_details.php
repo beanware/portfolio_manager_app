@@ -3,235 +3,344 @@ ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
-require_once 'connection.php'; // Include database connection
+require_once 'connection.php';
+include 'header.php';
 
-// Fetch project ID from URL
+// Validate and sanitize input
 $projectId = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
-// Initialize variables
-$project = null;
-$mainImage = null;
+// Early validation
+if ($projectId <= 0) {
+    // Redirect or show error
+    header('Location: gallery.php');
+    exit();
+}
+
+// Single query for project + main image
+$sql = "SELECT p.*, mi.image_path as main_image_path
+        FROM projects p 
+        LEFT JOIN mainimages mi ON p.project_id = mi.project_id
+        WHERE p.project_id = ?";
+$stmt = $connection->prepare($sql);
+
+if (!$stmt) {
+    die("Database error: " . $connection->error);
+}
+
+$stmt->bind_param("i", $projectId);
+$stmt->execute();
+$result = $stmt->get_result();
+$project = $result->fetch_assoc();
+
+// Separate query for carousel images
 $carouselImages = [];
-
-// Fetch project details
-$sql = "SELECT project_name, project_description, project_location, project_date, project_type, documentation FROM projects WHERE project_id = ?";
-$stmt = $connection->prepare($sql);
-$stmt->bind_param("i", $projectId);
-$stmt->execute();
-$projectResult = $stmt->get_result();
-
-if ($projectResult->num_rows > 0) {
-    $project = $projectResult->fetch_assoc();
-}
-
-// Fetch main image
-$sql = "SELECT image_path FROM mainimages WHERE project_id = ?";
-$stmt = $connection->prepare($sql);
-$stmt->bind_param("i", $projectId);
-$stmt->execute();
-$mainImageResult = $stmt->get_result();
-
-if ($mainImageResult->num_rows > 0) {
-    $mainImage = $mainImageResult->fetch_assoc();
-}
-
-// Fetch carousel images
-$sql = "SELECT image_path, image_title FROM carouselimages WHERE project_id = ? ORDER BY display_order LIMIT 500";
-$stmt = $connection->prepare($sql);
-$stmt->bind_param("i", $projectId);
-$stmt->execute();
-$carouselResult = $stmt->get_result();
-
-while ($rowCarousel = $carouselResult->fetch_assoc()) {
-    $carouselImages[] = $rowCarousel;
+if ($project) {
+    $carouselSql = "SELECT image_path, image_title 
+                    FROM carouselimages 
+                    WHERE project_id = ? 
+                    ORDER BY display_order";
+    $carouselStmt = $connection->prepare($carouselSql);
+    $carouselStmt->bind_param("i", $projectId);
+    $carouselStmt->execute();
+    $carouselResult = $carouselStmt->get_result();
+    $carouselImages = $carouselResult->fetch_all(MYSQLI_ASSOC);
+    $carouselStmt->close();
 }
 
 $stmt->close();
 $connection->close();
+
+// Helper function to safely output data
+function safeOutput($data, $default = 'Not specified') {
+    if (is_null($data) || trim($data) === '') {
+        return htmlspecialchars($default);
+    }
+    return htmlspecialchars($data);
+}
+
+// Helper function for date formatting
+function formatDate($dateString, $format = 'F Y') {
+    if (empty($dateString) || $dateString === '0000-00-00') {
+        return 'Date not specified';
+    }
+    try {
+        $date = new DateTime($dateString);
+        return $date->format($format);
+    } catch (Exception $e) {
+        return 'Invalid date';
+    }
+}
 ?>
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Project Details</title>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
-<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-    <style>
-        /* Popup overlay styles */
-        .popup-overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.8);
-            justify-content: center;
-            align-items: center;
-            z-index: 50;
-        }
-        .popup-overlay.show {
-            display: flex;
-        }
-
-        /* Image zooming and panning styles */
-        .popup-image-container {
-            max-width: 90%;
-            max-height: 90%;
-            overflow: hidden;
-            position: relative;
-            cursor: grab;
-        }
-        .popup-image {
-            transition: transform 0.3s ease;
-            max-width: 100%;
-            max-height: 100%;
-            border-radius: 8px;
-            transform-origin: center center;
-            cursor: zoom-in;
-        }
-        .popup-close {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            background: #fff;
-            color: #000;
-            border: none;
-            border-radius: 50%;
-            width: 30px;
-            height: 30px;
-            font-size: 20px;
-            cursor: pointer;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-    </style>
-</head>
-<body >
-   <div role="alert" class="alert bg-gray-900 text-white text-center items-center alert-vertical sm:alert-horizontal flex justify-center items-center m-4">
-  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-info h-6 w-6 shrink-0">
-    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-  </svg>
-  <div>
-    <h3 class="font-bold">Helpful Tip!</h3>
-    <div class="text-lg">Click Images To Expand View.</div>
-  </div>
-</div>
-</div>
-    <div class="container mx-auto max-w-4xl my-10 p-5 bg-white rounded-lg shadow-lg">
-        <div class="flex justify-center gap-4 mt-8">
-      <a class="relative" href="gallery.php">
-        <span class="absolute top-0 left-0 mt-1 ml-1 h-full w-full rounded bg-black"></span>
-        <span class="fold-bold relative inline-block h-full w-full rounded border-2 border-pt bg-white px-4 py-2 text-black font-bold transition duration-100 hover:bg-gray-900 hover:text-white transition duration-300 uppercase">Return</span>
-    </a>  
+    <!-- Back Navigation -->
+    <div class="mb-8">
+        <a href="gallery.php" class="btn btn-ghost">
+            <i class="fas fa-arrow-left mr-2"></i> Back to Gallery
+        </a>
     </div>
-        <?php if ($project): ?>
-            <h1 class="text-3xl font-bold text-gray-800 mt-5"><?php echo htmlspecialchars($project['project_name']); ?></h1>
-            <?php if ($mainImage): ?>
-                <img class="w-full h-auto max-h-96 object-cover rounded-lg shadow-md mt-4" src="<?php echo htmlspecialchars($mainImage['image_path']); ?>" alt="Main Image" onclick="openPopup('<?php echo htmlspecialchars($mainImage['image_path']); ?>')">
-            <?php endif; ?>
-            <p class="text-gray-600 mt-4"><?php echo nl2br(htmlspecialchars($project['project_description'])); ?></p>
-            <p class="text-gray-700 mt-2"><strong>Location:</strong> <?php echo htmlspecialchars($project['project_location']); ?></p>
-            <p class="text-gray-700 mt-2"><strong>Date:</strong> <?php echo htmlspecialchars($project['project_date']); ?></p>
-            <p class="text-gray-700 mt-2"><strong>Type:</strong> <?php echo htmlspecialchars($project['project_type']); ?></p>
-            <?php if (!empty($project['documentation'])): ?>
-                <p class="text-gray-700 mt-2"><strong>Documentation:</strong> <a href="<?php echo htmlspecialchars($project['documentation']); ?>" target="_blank" class="text-blue-600 hover:underline">View PDF</a></p>
-            <?php endif; ?>
 
-            <div class="mt-8">
-                <?php if (count($carouselImages) > 0): ?>
-                    <div class="flex overflow-x-auto space-x-4 p-2">
-                        <?php foreach ($carouselImages as $image): ?>
-                            <img class="max-w-xs max-h-32 object-cover rounded-lg shadow-sm cursor-pointer transition-transform duration-200 hover:scale-105" src="<?php echo htmlspecialchars($image['image_path']); ?>" alt="<?php echo htmlspecialchars($image['image_title']); ?>" onclick="openPopup('<?php echo htmlspecialchars($image['image_path']); ?>')">
-                        <?php endforeach; ?>
+    <?php if (!$project): ?>
+        <div class="alert alert-error shadow-lg">
+            <div>
+                <i class="fas fa-exclamation-triangle"></i>
+                <span>Project not found. It may have been removed or the link is incorrect.</span>
+            </div>
+            <div class="mt-4">
+                <a href="gallery.php" class="btn btn-primary">Browse Available Projects</a>
+            </div>
+        </div>
+    <?php else: ?>
+        <!-- Project Header -->
+        <div class="mb-10">
+            <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-8">
+                <div>
+                    <h1 class="text-5xl font-extrabold text-base-content leading-tight">
+                        <?php echo safeOutput($project['project_name'], 'Unnamed Project'); ?>
+                    </h1>
+                    <?php if (!empty($project['project_location'])): ?>
+                        <p class="text-lg text-base-content/80 flex items-center mt-2">
+                            <i class="fas fa-map-marker-alt mr-2 text-primary"></i>
+                            <?php echo safeOutput($project['project_location']); ?>
+                        </p>
+                    <?php endif; ?>
+                </div>
+                <?php if (!empty($project['price_range'])): ?>
+                    <div class="text-right lg:text-left">
+                        <span class="text-4xl font-bold text-primary">
+                            <?php echo htmlspecialchars($project['price_range']); ?>
+                        </span>
                     </div>
                 <?php endif; ?>
             </div>
-        <?php else: ?>
-            <p class="text-red-600">Project not found.</p>
-        <?php endif; ?>
-    </div>
 
-    <!-- Popup Overlay -->
-    <div id="popup-overlay" class="popup-overlay">
-        <button class="popup-close" onclick="closePopup()">&times;</button>
-        <div class="popup-image-container">
-            <img id="popup-image" class="popup-image" src="" alt="Popup Image">
+            <!-- Key Property Facts Section -->
+            <div class="bg-base-200 rounded-2xl p-6 shadow-md mb-10">
+                <h3 class="text-xl font-bold text-base-content mb-4">Property Highlights</h3>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-base-content/70">
+                    <?php if (!empty($project['bedrooms'])): ?>
+                        <div class="flex flex-col items-center justify-center p-3 bg-base-100 rounded-lg shadow-sm">
+                            <i class="fas fa-bed text-2xl mb-1 text-primary"></i>
+                            <span class="font-bold text-lg"><?php echo htmlspecialchars($project['bedrooms']); ?></span>
+                            <span class="text-xs uppercase">Beds</span>
+                        </div>
+                    <?php endif; ?>
+                    <?php if (!empty($project['bathrooms'])): ?>
+                        <div class="flex flex-col items-center justify-center p-3 bg-base-100 rounded-lg shadow-sm">
+                            <i class="fas fa-bath text-2xl mb-1 text-primary"></i>
+                            <span class="font-bold text-lg"><?php echo htmlspecialchars($project['bathrooms']); ?></span>
+                            <span class="text-xs uppercase">Baths</span>
+                        </div>
+                    <?php endif; ?>
+                    <?php if (!empty($project['square_footage'])): ?>
+                        <div class="flex flex-col items-center justify-center p-3 bg-base-100 rounded-lg shadow-sm">
+                            <i class="fas fa-ruler-combined text-2xl mb-1 text-primary"></i>
+                            <span class="font-bold text-lg"><?php echo htmlspecialchars($project['square_footage']); ?></span>
+                            <span class="text-xs uppercase">Sqft</span>
+                        </div>
+                    <?php endif; ?>
+                    <?php if (!empty($project['project_type'])): ?>
+                        <div class="flex flex-col items-center justify-center p-3 bg-base-100 rounded-lg shadow-sm">
+                            <i class="fas fa-building text-2xl mb-1 text-primary"></i>
+                            <span class="font-bold text-lg capitalize"><?php echo htmlspecialchars($project['project_type']); ?></span>
+                            <span class="text-xs uppercase">Type</span>
+                        </div>
+                    <?php endif; ?>
+                    <?php if (!empty($project['project_date']) && $project['project_date'] !== '0000-00-00'): ?>
+                        <div class="flex flex-col items-center justify-center p-3 bg-base-100 rounded-lg shadow-sm">
+                            <i class="fas fa-calendar text-2xl mb-1 text-primary"></i>
+                            <span class="font-bold text-lg"><?php echo formatDate($project['project_date']); ?></span>
+                            <span class="text-xs uppercase">Date</span>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
         </div>
-    </div>
 
-    <script>
-        let scale = 1;
-        let isPanning = false;
-        let startX, startY;
-        let translateX = 0, translateY = 0;
+        <!-- Main Image with Modal Trigger -->
+        <?php if (!empty($project['main_image_path'])): ?>
+        <div class="mb-10 relative">
+            <figure class="rounded-2xl overflow-hidden shadow-2xl cursor-zoom-in hover:shadow-3xl transition-shadow duration-300"
+                    onclick="document.getElementById('modal-main').showModal()">
+                <img src="<?php echo htmlspecialchars($project['main_image_path']); ?>" 
+                     alt="<?php echo safeOutput($project['project_name'], 'Project image'); ?>"
+                     class="w-full h-auto max-h-[70vh] object-cover"
+                     loading="eager">
+                <div class="absolute inset-0 bg-gradient-to-t from-base-100/10 to-transparent"></div>
+                <div class="absolute bottom-4 right-4 bg-base-100/90 backdrop-blur-sm rounded-full p-3 shadow-lg hover:scale-110 transition-transform">
+                    <i class="fas fa-expand-alt text-base-content text-lg"></i>
+                </div>
+            </figure>
+            
+            <!-- DaisyUI Modal for Main Image -->
+            <dialog id="modal-main" class="modal">
+                <div class="modal-box max-w-6xl p-0 bg-transparent shadow-none overflow-visible">
+                    <form method="dialog">
+                        <button class="btn btn-sm btn-circle btn-ghost absolute -right-3 -top-3 z-10 bg-base-100 shadow-lg hover:bg-base-200 border border-base-300"
+                                aria-label="Close image view">
+                            ✕
+                        </button>
+                    </form>
+                    <img src="<?php echo htmlspecialchars($project['main_image_path']); ?>" 
+                         alt="Full size view" 
+                         class="w-full h-auto rounded-lg shadow-2xl">
+                </div>
+                <form method="dialog" class="modal-backdrop">
+                    <button>close</button>
+                </form>
+            </dialog>
+        </div>
+        <?php endif; ?>
 
-        function openPopup(imageSrc) {
-            const popupImage = document.getElementById("popup-image");
-            popupImage.src = imageSrc;
-            document.getElementById("popup-overlay").classList.add("show");
-            scale = 1;
-            translateX = 0;
-            translateY = 0;
-            popupImage.style.transform = `scale(${scale}) translate(0px, 0px)`;
-            popupImage.style.cursor = "zoom-in";
-        }
+        <!-- Project Description -->
+        <div class="prose prose-lg max-w-none mb-12">
+            <h2 class="text-2xl font-bold text-base-content mb-4">Project Overview</h2>
+            <div class="bg-base-100 rounded-2xl p-6 shadow-sm border border-base-300">
+                <?php if (!empty($project['project_description'])): ?>
+                    <p class="text-base-content/80 leading-relaxed">
+                        <?php echo nl2br(safeOutput($project['project_description'])); ?>
+                    </p>
+                <?php else: ?>
+                    <div class="text-center py-8">
+                        <i class="fas fa-clipboard text-4xl text-base-content/30 mb-4"></i>
+                        <p class="text-base-content/60">No description available for this project.</p>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
 
-        function closePopup() {
-            document.getElementById("popup-overlay").classList.remove("show");
-            document.getElementById("popup-image").src = "";
-        }
+        <!-- Image Gallery/Carousel -->
+        <?php if (!empty($carouselImages)): ?>
+        <div class="mb-12">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="m-4 text-2xl font-bold text-base-content">Project Gallery</h2>
+                <div class="text-sm text-base-content/60">
+                    <span><?php echo count($carouselImages); ?> images</span>
+                </div>
+            </div>
+            
+            <!-- Responsive Image Grid -->
+            <div class="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 m-2">
+                <?php foreach ($carouselImages as $index => $image): ?>
+                <div class="relative group rounded-xl overflow-hidden shadow-lg cursor-pointer hover:shadow-xl transition-shadow duration-300"
+                     onclick="openImageModal(<?php echo $index; ?>)">
+                    <img src="<?php echo htmlspecialchars($image['image_path']); ?>" 
+                         alt="<?php echo safeOutput($image['image_title'], 'Project image ' . ($index + 1)); ?>"
+                         class="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
+                         loading="lazy"
+                    >
+                    <?php if (!empty($image['image_title'])): ?>
+                    <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-base-100/90 to-transparent p-3 text-sm text-base-content opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                        <span class="font-medium truncate block"><?php echo safeOutput($image['image_title']); ?></span>
+                    </div>
+                    <?php endif; ?>
+                    <div class="absolute inset-0 flex items-center justify-center bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-300">
+                        <i class="fas fa-search-plus text-white text-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></i>
+                    </div>
+                </div>
+                <?php endforeach; ?>
+            </div>
 
-        const popupImage = document.getElementById("popup-image");
-        
-        // Zoom in/out with mouse wheel
-        popupImage.addEventListener("wheel", function(event) {
-            event.preventDefault();
-            scale += event.deltaY * -0.001;
-            scale = Math.min(Math.max(1, scale), 3);
-            popupImage.style.transform = `scale(${scale}) translate(${translateX}px, ${translateY}px)`;
-            popupImage.style.cursor = scale > 1 ? "grab" : "zoom-in";
-        });
+            <!-- DaisyUI Modal for Gallery Images -->
+            <dialog id="modal-gallery" class="modal">
+                <div class="modal-box max-w-6xl p-0 bg-transparent shadow-none overflow-visible">
+                    <form method="dialog">
+                        <button class="btn btn-sm btn-circle btn-ghost absolute -right-3 -top-3 z-10 bg-base-100 shadow-lg hover:bg-base-200 border border-base-300"
+                                aria-label="Close gallery">
+                            ✕
+                        </button>
+                    </form>
+                    <div id="modal-gallery-content" class="carousel w-full">
+                        <?php foreach ($carouselImages as $index => $image): ?>
+                        <div id="gallery-item-<?php echo $index; ?>" 
+                             class="carousel-item w-full justify-center" style="scroll-snap-align: center;"> <!-- Removed 'hidden' and added justify-center, style for snap-align -->
+                            <img src="<?php echo htmlspecialchars($image['image_path']); ?>" 
+                                 alt="<?php echo safeOutput($image['image_title'], 'Gallery image ' . ($index + 1)); ?>"
+                                 class="w-full h-auto max-h-[80vh] object-contain rounded-lg shadow-2xl">
+                            <?php if (!empty($image['image_title'])): ?>
+                            <div class="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-base-100/90 backdrop-blur-sm rounded-lg px-4 py-2 shadow-lg">
+                                <span class="font-medium"><?php echo safeOutput($image['image_title']); ?></span>
+                            </div>
+                            <?php endif; ?>
+                        </div>
+                        <?php endforeach; ?>
+                    </div>
+                    
+                    <!-- Navigation dots -->
+                    <?php if (count($carouselImages) > 1): ?>
+                    <div class="flex justify-center w-full py-4 gap-2 mt-4"> <!-- Moved inside modal-box, added mt-4, removed absolute positioning -->
+                        <?php foreach ($carouselImages as $index => $image): ?>
+                        <button onclick="showGalleryImage(<?php echo $index; ?>)" 
+                                class="btn btn-xs btn-circle <?php echo $index === 0 ? 'btn-primary' : 'btn-ghost'; ?>"
+                                aria-label="View image <?php echo $index + 1; ?>">
+                            <?php echo $index + 1; ?>
+                        </button>
+                        <?php endforeach; ?>
+                    </div>
+                    <?php endif; ?>
+                </div>
+                <form method="dialog" class="modal-backdrop">
+                    <button>close</button>
+                </form>
+            </dialog>
 
-        // Start panning on mouse down
-        popupImage.addEventListener("mousedown", function(event) {
-            if (scale > 1) {
-                isPanning = true;
-                startX = event.clientX - translateX;
-                startY = event.clientY - translateY;
-                popupImage.style.cursor = "grabbing";
-                event.preventDefault();
-            }
-        });
+            <script>
+                function openImageModal(index) {
+                    const modal = document.getElementById('modal-gallery');
+                    showGalleryImage(index);
+                    modal.showModal();
+                }
+                
+                function showGalleryImage(index) {
+                    const carouselContent = document.getElementById('modal-gallery-content');
+                    const items = carouselContent.querySelectorAll('.carousel-item');
+                    const dots = document.querySelectorAll('#modal-gallery .btn-circle');
+                    
+                    if (items.length === 0 || index < 0 || index >= items.length) return; // Guard against empty or invalid index
 
-        // Adjust translation while panning
-        document.addEventListener("mousemove", function(event) {
-            if (isPanning) {
-                translateX = event.clientX - startX;
-                translateY = event.clientY - startY;
-                popupImage.style.transform = `scale(${scale}) translate(${translateX}px, ${translateY}px)`;
-            }
-        });
+                    // Calculate scroll position
+                    const targetItem = items[index];
+                    
+                    // The scrollLeft should be the offsetLeft of the target item relative to its parent's scrollable area
+                    carouselContent.scrollTo({
+                        left: targetItem.offsetLeft,
+                        behavior: 'smooth'
+                    });
+                    
+                    // Update active dot
+                    dots.forEach((dot, i) => {
+                        if (i === index) {
+                            dot.classList.remove('btn-ghost');
+                            dot.classList.add('btn-primary');
+                        } else {
+                            dot.classList.remove('btn-primary');
+                            dot.classList.add('btn-ghost');
+                        }
+                    });
+                }
 
-        // End panning on mouse up
-        document.addEventListener("mouseup", function() {
-            isPanning = false;
-            popupImage.style.cursor = scale > 1 ? "grab" : "zoom-in";
-        });
+                // New JavaScript for carousel scrolling
+                function scrollCarousel(direction) {
+                    const carousel = document.getElementById('image-carousel');
+                    const scrollAmount = carousel.offsetWidth * 0.7; // Scroll by about 70% of carousel width
+                    carousel.scrollBy({
+                        left: direction * scrollAmount,
+                        behavior: 'smooth'
+                    });
+                }
+            </script>
+        </div>
+        <?php else: ?>
+        <!-- Empty gallery state -->
+        <div class="mb-12">
+            <h2 class="text-2xl font-bold text-base-content mb-6">Project Gallery</h2>
+            <div class="bg-base-100 rounded-2xl p-12 text-center border border-base-300 border-dashed">
+                <i class="fas fa-images text-5xl text-base-content/20 mb-4"></i>
+                <h3 class="text-xl font-medium text-base-content/70 mb-2">No additional images</h3>
+                <p class="text-base-content/50 max-w-md mx-auto">
+                    This project doesn't have a gallery yet. Additional images can be added through the management panel.
+                </p>
+            </div>
+        </div>
+        <?php endif; ?>
 
-        // Reset zoom and pan on image click
-        // popupImage.addEventListener("click", function() {
-        //     if (scale === 1) return;
-        //     scale = 1;
-        //     translateX = 0;
-        //     translateY = 0;
-        //     popupImage.style.transform = `scale(${scale}) translate(0px, 0px)`;
-        //     popupImage.style.cursor = "zoom-in";
-        // });
-    </script>
-</body>
-</html>
+    <?php endif; ?>

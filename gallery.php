@@ -1,82 +1,93 @@
 <?php
 include 'connection.php';
-include 'navbar.php';
+include 'header.php'; // This now includes our unified DaisyUI setup
 
-// Fetch all projects
-$query = "SELECT * FROM projects";
+// SOLVE N+1 PROBLEM: Single query with JOIN
+$query = "SELECT p.*, mi.image_path as main_image_path, mi.image_title as main_image_title 
+          FROM projects p 
+          LEFT JOIN mainimages mi ON p.project_id = mi.project_id
+          ORDER BY p.project_date DESC";
 $result = $connection->query($query);
 
-// Check for errors
 if (!$result) {
     die("Query failed: " . $connection->error);
 }
 
-// Fetch the projects into an array
-$projects = [];
-while ($row = $result->fetch_assoc()) {
-    $projects[] = $row;
-}
-
-// Do not close the connection here, keep it open for the images
+$projects = $result->fetch_all(MYSQLI_ASSOC);
+$connection->close();
 ?>
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gallery Page</title>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-</head>
-<body class="bg-gray-100 p-6">
-    <h1 style="font-family: 'Comic Sans MS', cursive; " class="text-3xl font-bold text-center text-black mb-8 pt-10">Project Gallery</h1>
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-4" >
-        <?php foreach ($projects as $project): ?>
-                <div class="card bg-base-100 w-96 shadow-sm">
-                <!-- Fetch and display main image -->
-                <?php
-                // Get the main image for the project
-                $mainImageQuery = "SELECT * FROM mainimages WHERE project_id = " . intval($project['project_id']);
-                $mainImageResult = $connection->query($mainImageQuery);
-                
-                // Check if the main image query was successful
-                if ($mainImageResult) {
-                    $mainImage = $mainImageResult->fetch_assoc();
-                } else {
-                    $mainImage = null; // If there is no main image
-                }
-                ?>
-            
-                <?php if ($mainImage): ?>
-                <figure>
-                    <img
-                  src="<?php echo htmlspecialchars($mainImage['image_path']); ?>"
-                  alt="<?php echo htmlspecialchars($mainImage['image_title']); ?>"
-                  /></figure>
-
-                <?php else: ?>
-                <figure>
-                    <img src="uploads/main/default.jpg" alt="Default image"></figure> <!-- Default image -->
-                <?php endif; ?>
-            
-                <div class="card-body">
-                <h2 style="font-family: 'Comic Sans MS', cursive; font-weight: bold;" class="card-title uppercase"><?php echo htmlspecialchars($project['project_name']); ?></h2>
-                <p><?php echo htmlspecialchars($project['project_description']); ?></p>
-
-                
-                <!---->
-                <div class="flex justify-center gap-4 mt-8">
-      <a class="relative" href="project_details.php?id=<?php echo intval($project['project_id']); ?>">
-        <span class="absolute top-0 left-0 mt-1 ml-1 h-full w-full rounded bg-black"></span>
-        <span class="fold-bold relative inline-block h-full w-full rounded border-2 border-pt bg-white px-4 py-2 text-black font-bold transition duration-100 hover:bg-gray-900 hover:text-white transition duration-300">View Details</span>
-    </a>  
-    </div>
+<main class="container mx-auto px-4 py-8">
+    <h1 class="text-4xl font-bold text-center text-base-content mb-12 pt-4">Project Portfolio</h1>
+    
+    <?php if (empty($projects)): ?>
+        <div class="alert alert-info shadow-lg max-w-2xl mx-auto">
+            <div>
+                <i class="fas fa-info-circle"></i>
+                <span>No projects yet. Add some through the management panel.</span>
             </div>
         </div>
-        <?php endforeach; ?>
-        
-    </div>
+    <?php else: ?>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+            <?php foreach ($projects as $project): ?>
+            <div class="card bg-base-100 shadow-xl hover:shadow-2xl transition-shadow duration-300">
+                <figure class="h-64 overflow-hidden">
+                    <img 
+                        src="<?php echo htmlspecialchars($project['main_image_path'] ?? 'uploads/main/default.jpg'); ?>" 
+                        alt="<?php echo htmlspecialchars($project['main_image_title'] ?? $project['project_name']); ?>"
+                        class="w-full h-full object-cover hover:scale-105 transition-transform duration-500"
+                        loading="lazy"
+                    >
+                </figure>
+                <div class="card-body">
+                    <h2 class="card-title text-base-content mb-2">
+                        <?php echo htmlspecialchars($project['project_name']); ?>
+                    </h2>
+                    
+                    <div class="flex items-center text-base-content/80 text-sm mb-3">
+                        <i class="fas fa-map-marker-alt mr-2"></i>
+                        <span class="font-semibold"><?php echo htmlspecialchars($project['project_location'] ?? 'Location not specified'); ?></span>
+                    </div>
 
+                    <?php if (!empty($project['price_range'])): ?>
+                        <p class="text-2xl font-bold text-primary mb-3">
+                            <?php echo htmlspecialchars($project['price_range']); ?>
+                        </p>
+                    <?php endif; ?>
 
-    <?php $connection->close(); // Close the connection after all queries are done ?>
-    <?php include 'footer.php'; ?>
+                    <div class="flex flex-wrap gap-4 text-sm text-base-content/70 mb-4">
+                        <?php if (!empty($project['bedrooms'])): ?>
+                            <div class="flex items-center">
+                                <i class="fas fa-bed mr-1"></i> <?php echo htmlspecialchars($project['bedrooms']); ?> Beds
+                            </div>
+                        <?php endif; ?>
+                        <?php if (!empty($project['bathrooms'])): ?>
+                            <div class="flex items-center">
+                                <i class="fas fa-bath mr-1"></i> <?php echo htmlspecialchars($project['bathrooms']); ?> Baths
+                            </div>
+                        <?php endif; ?>
+                        <?php if (!empty($project['square_footage'])): ?>
+                            <div class="flex items-center">
+                                <i class="fas fa-ruler-combined mr-1"></i> <?php echo htmlspecialchars($project['square_footage']); ?> sqft
+                            </div>
+                        <?php endif; ?>
+                    </div>
+
+                    <p class="text-base-content/70 line-clamp-3 mb-4">
+                        <?php echo htmlspecialchars($project['project_description'] ?? 'No description available.'); ?>
+                    </p>
+
+                    <div class="card-actions justify-end">
+                        <a href="project_details.php?id=<?php echo intval($project['project_id']); ?>" 
+                           class="btn btn-primary">
+                            View Property <i class="fas fa-arrow-right ml-2"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+            <?php endforeach; ?>
+        </div>
+    <?php endif; ?>
+</main>
+
+<?php include 'footer.php'; ?>
