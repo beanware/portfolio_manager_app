@@ -68,7 +68,8 @@ function getCurrentUser() {
         'username' => $_SESSION['username'] ?? null,
         'email' => $_SESSION['email'] ?? null,
         'role' => $_SESSION['role'] ?? 'viewer',
-        'display_name' => $_SESSION['display_name'] ?? 'User'
+        'display_name' => $_SESSION['display_name'] ?? 'User',
+        'organization_id' => $_SESSION['organization_id'] ?? null
     ];
 }
 
@@ -84,14 +85,23 @@ function requireAuth($redirectTo = 'login.php') {
 }
 
 /**
- * Require specific role for a page
+ * Require specific role(s) for a page
  * Returns 403 if user doesn't have required role
  */
-function requireRole($requiredRole, $redirectTo = '403.php') {
+function requireRole($requiredRoles, $redirectTo = '403.php') {
     requireAuth();
     
+    if (!is_array($requiredRoles)) {
+        $requiredRoles = [$requiredRoles];
+    }
+    
+    // Always allow super_admin to access admin pages if not explicitly excluded
+    if (!in_array('super_admin', $requiredRoles) && !in_array('admin_only', $requiredRoles)) {
+        $requiredRoles[] = 'super_admin';
+    }
+
     $user = getCurrentUser();
-    if ($user['role'] !== $requiredRole) {
+    if (!in_array($user['role'], $requiredRoles)) {
         if ($redirectTo === false) {
             http_response_code(403);
             die('Access denied. Insufficient permissions.');
@@ -103,12 +113,15 @@ function requireRole($requiredRole, $redirectTo = '403.php') {
 /**
  * Check if user has at least one of the specified roles
  */
-function hasAnyRole($roles) {
+function hasAnyRole($roles, $user = null) {
     if (!is_array($roles)) {
         $roles = [$roles];
     }
     
-    $user = getCurrentUser();
+    if ($user === null) {
+        $user = getCurrentUser();
+    }
+
     if (!$user) {
         return false;
     }
@@ -215,11 +228,11 @@ function logActivity($action, $entity = null, $entityId = null) {
 /**
  * Check if username/email already exists
  */
-function userExists($username, $email) {
+function userExists($username, $email, $organization_id) {
     global $connection;
     
-    $stmt = $connection->prepare("SELECT user_id FROM users WHERE username = ? OR email = ?");
-    $stmt->bind_param("ss", $username, $email);
+    $stmt = $connection->prepare("SELECT user_id FROM users WHERE (username = ? OR email = ?) AND organization_id = ?");
+    $stmt->bind_param("ssi", $username, $email, $organization_id);
     $stmt->execute();
     $stmt->store_result();
     $exists = $stmt->num_rows > 0;
@@ -250,12 +263,12 @@ function getUserById($userId) {
 /**
  * Register a new user
  */
-function registerUser($username, $email, $password, $display_name, $role = 'viewer') {
+function registerUser($username, $email, $password, $display_name, $organization_id, $role = 'viewer') {
     global $connection;
 
-    // Check if username or email already exists
-    if (userExists($username, $email)) {
-        return ['success' => false, 'message' => 'Username or email already registered.'];
+    // Check if username or email already exists in the organization
+    if (userExists($username, $email, $organization_id)) {
+        return ['success' => false, 'message' => 'Username or email already registered in this organization.'];
     }
 
     // Hash the password
@@ -263,10 +276,10 @@ function registerUser($username, $email, $password, $display_name, $role = 'view
 
     try {
         $stmt = $connection->prepare("
-            INSERT INTO users (username, email, password_hash, display_name, role) 
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO users (username, email, password_hash, display_name, role, organization_id) 
+            VALUES (?, ?, ?, ?, ?, ?)
         ");
-        $stmt->bind_param("sssss", $username, $email, $password_hash, $display_name, $role);
+        $stmt->bind_param("sssssi", $username, $email, $password_hash, $display_name, $role, $organization_id);
         $stmt->execute();
 
         if ($stmt->affected_rows === 1) {
@@ -291,7 +304,7 @@ function verifyCredentials($usernameOrEmail, $password) {
     global $connection;
     
     $stmt = $connection->prepare("
-        SELECT user_id, username, email, password_hash, role, display_name, account_locked_until 
+        SELECT user_id, username, email, password_hash, role, display_name, account_locked_until, organization_id 
         FROM users WHERE username = ? OR email = ?
     ");
     $stmt->bind_param("ss", $usernameOrEmail, $usernameOrEmail);

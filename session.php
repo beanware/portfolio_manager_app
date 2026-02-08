@@ -19,7 +19,7 @@ if (isset($_SESSION['user_agent']) && $_SESSION['user_agent'] !== $_SERVER['HTTP
 }
 
 // Set session expiration time (10 minutes)
-$inactivity_limit = 600;
+$inactivity_limit = 1000;
 if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > $inactivity_limit)) {
     session_unset();
     session_destroy();

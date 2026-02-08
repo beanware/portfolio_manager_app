@@ -1,4 +1,6 @@
-<?php include 'header.php'; ?>
+<?php
+define('ACCESS_ALLOWED', true); // Define this to allow access to included files
+include 'header.php'; ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -22,6 +24,9 @@
             <!-- DaisyUI button component, using theme's primary color -->
             <a href="gallery.php" class="mt-8 inline-block px-6 py-3 text-gray-800 bg-gray-300 rounded hover:bg-gray-400 transition duration-200 ease-in-out">
             View our Portfolio
+        </a>
+        <a href="marketplace.php" class="mt-8 ml-4 inline-block px-6 py-3 text-white bg-blue-600 rounded hover:bg-blue-700 transition duration-200 ease-in-out">
+            Explore Organizations
         </a>
         </div>
     </div>

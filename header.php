@@ -1,16 +1,29 @@
 <?php
 session_start();
 include 'session.php';
-$isLoggedIn = isset($_SESSION['user_id']);
+require_once 'includes/auth_functions.php'; // Explicitly include for getCurrentUser and role checks
+
+$isLoggedIn = isAuthenticated();
+$currentUser = getCurrentUser(); // Get current user details
 
 // Navigation links defined ONCE in a PHP array for single source of truth.
 // This is a crucial step towards a configurable system.
 $navLinks = [
     ['title' => 'Home', 'url' => 'index.php'],
     ['title' => 'Project Gallery', 'url' => 'gallery.php'],
+    ['title' => 'Marketplace', 'url' => 'marketplace.php'] // Added marketplace link
 ];
+
 if ($isLoggedIn) {
     $navLinks[] = ['title' => 'Manage Projects', 'url' => 'projects.php'];
+
+    // Conditionally add dashboard links based on roles
+    if ($currentUser && hasAnyRole(['super_admin'], $currentUser)) {
+        $navLinks[] = ['title' => 'Overall Admin', 'url' => 'admin_dashboard.php'];
+    } elseif ($currentUser && hasAnyRole(['admin'], $currentUser)) {
+        // Assuming 'admin' is the role for organization admins
+        $navLinks[] = ['title' => 'Org Admin Dashboard', 'url' => 'organization_admin_dashboard.php'];
+    }
 }
 $navLinks[] = ['title' => 'About', 'url' => 'about.php'];
 if ($isLoggedIn) {

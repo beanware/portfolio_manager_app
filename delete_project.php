@@ -7,6 +7,16 @@ require_once 'includes/auth_functions.php';
 // Authenticate and authorize admin access
 requireRole('admin');
 
+// Get the current user
+$currentUser = getCurrentUser();
+$organization_id = $currentUser['organization_id'];
+$isSuperAdmin = hasAnyRole(['super_admin']);
+
+// If the user has no organization and is not a super_admin, block access
+if (!$organization_id && !$isSuperAdmin) {
+    safeRedirect("403.php?message=" . urlencode("You are not associated with any organization."), 403);
+}
+
 $message = '';
 $messageType = 'error';
 
@@ -20,9 +30,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['project_id'])) {
         try {
             // 1. Fetch image paths for mainimages and carouselimages
             $imagePathsToDelete = [];
+            
+            // Build the WHERE clause dynamically based on role
+            $whereClause = "WHERE project_id = ?";
+            if (!$isSuperAdmin) {
+                $whereClause .= " AND organization_id = $organization_id";
+            }
 
             // Main Image
-            $stmt = $connection->prepare("SELECT image_path FROM mainimages WHERE project_id = ?");
+            $stmt = $connection->prepare("SELECT image_path FROM mainimages " . $whereClause);
             $stmt->bind_param("i", $projectId);
             $stmt->execute();
             $result = $stmt->get_result();
@@ -32,7 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['project_id'])) {
             $stmt->close();
 
             // Carousel Images
-            $stmt = $connection->prepare("SELECT image_path FROM carouselimages WHERE project_id = ?");
+            $stmt = $connection->prepare("SELECT image_path FROM carouselimages " . $whereClause);
             $stmt->bind_param("i", $projectId);
             $stmt->execute();
             $result = $stmt->get_result();
@@ -42,18 +58,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['project_id'])) {
             $stmt->close();
 
             // 2. Delete records from mainimages and carouselimages tables
-            $stmt = $connection->prepare("DELETE FROM mainimages WHERE project_id = ?");
+            $stmt = $connection->prepare("DELETE FROM mainimages " . $whereClause);
             $stmt->bind_param("i", $projectId);
             $stmt->execute();
             $stmt->close();
 
-            $stmt = $connection->prepare("DELETE FROM carouselimages WHERE project_id = ?");
+            $stmt = $connection->prepare("DELETE FROM carouselimages " . $whereClause);
             $stmt->bind_param("i", $projectId);
             $stmt->execute();
             $stmt->close();
 
             // 3. Delete the project record from the projects table
-            $stmt = $connection->prepare("DELETE FROM projects WHERE project_id = ?");
+            $stmt = $connection->prepare("DELETE FROM projects " . $whereClause);
             $stmt->bind_param("i", $projectId);
             $stmt->execute();
             $deletedRows = $stmt->affected_rows;
@@ -80,12 +96,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['project_id'])) {
                 $messageType = 'success';
             } else {
                 $connection->rollback();
-                $message = "Project not found or already deleted.";
+                $message = "Project not found, already deleted, or you do not have permission to delete it.";
             }
 
         } catch (mysqli_sql_exception $e) {
             $connection->rollback();
             $message = "Database error: " . $e->getMessage();
+            error_log("Delete Project SQL Error: " . $e->getMessage());
         }
     } else {
         $message = "Invalid project ID.";

@@ -77,14 +77,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         // Check if username or email already exists in DB
-        if (empty($errors) && userExists($username, $email)) { // Only check if no other errors to avoid multiple messages for same issue
+        // Assign to default organization (ID 1) for registration, or implement an organization selection in the form
+        $registration_org_id = 1; 
+
+        if (empty($errors) && userExists($username, $email, $registration_org_id)) { 
             $errors[] = "Username or email already registered.";
         }
 
         if (empty($errors)) {
             // Determine role: 'admin' if it's the first user, otherwise 'viewer'
             // Re-fetch admin count right before registration to prevent race conditions in a multi-user env
-            $stmt = $connection->prepare("SELECT COUNT(*) as admin_count FROM users WHERE role = 'admin'");
+            $stmt = $connection->prepare("SELECT COUNT(*) as admin_count FROM users WHERE role = 'admin' AND organization_id = ?");
+            $stmt->bind_param("i", $registration_org_id);
             $stmt->execute();
             $result = $stmt->get_result();
             $currentAdminCount = $result->fetch_assoc()['admin_count'];
@@ -92,7 +96,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $role = ($currentAdminCount == 0) ? 'admin' : 'viewer';
             
-            $registrationResult = registerUser($username, $email, $password, $display_name, $role);
+            $registrationResult = registerUser($username, $email, $password, $display_name, $registration_org_id, $role);
 
             if ($registrationResult['success']) {
                 $success = $registrationResult['message'] . " You can now log in.";

@@ -1,4 +1,5 @@
 <?php
+define('ACCESS_ALLOWED', true);
 include 'connection.php';
 include 'header.php'; // This now includes our unified DaisyUI setup
 
