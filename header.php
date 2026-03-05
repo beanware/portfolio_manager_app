@@ -1,30 +1,42 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 include 'session.php';
 require_once 'includes/auth_functions.php'; // Explicitly include for getCurrentUser and role checks
 
 $isLoggedIn = isAuthenticated();
 $currentUser = getCurrentUser(); // Get current user details
 
+$hasOrg = ($currentUser && !empty($currentUser['organization_id']));
+
 // Navigation links defined ONCE in a PHP array for single source of truth.
-// This is a crucial step towards a configurable system.
 $navLinks = [
-    ['title' => 'Home', 'url' => 'index.php'],
-    ['title' => 'Project Gallery', 'url' => 'gallery.php'],
-    ['title' => 'Marketplace', 'url' => 'marketplace.php'] // Added marketplace link
+    ['title' => 'Home', 'url' => 'index.php']
 ];
 
-if ($isLoggedIn) {
+if ($isLoggedIn && $hasOrg) {
+    $navLinks[] = ['title' => 'Project Gallery', 'url' => 'gallery.php'];
+    $navLinks[] = ['title' => 'Marketplace', 'url' => 'marketplace.php'];
     $navLinks[] = ['title' => 'Manage Projects', 'url' => 'projects.php'];
 
     // Conditionally add dashboard links based on roles
     if ($currentUser && hasAnyRole(['super_admin'], $currentUser)) {
         $navLinks[] = ['title' => 'Overall Admin', 'url' => 'admin_dashboard.php'];
     } elseif ($currentUser && hasAnyRole(['admin'], $currentUser)) {
-        // Assuming 'admin' is the role for organization admins
         $navLinks[] = ['title' => 'Org Admin Dashboard', 'url' => 'organization_admin_dashboard.php'];
     }
 }
+
+if ($isLoggedIn && !$hasOrg) {
+    $navLinks[] = ['title' => 'Setup Organization', 'url' => 'create_organization.php', 'class' => 'text-primary font-bold'];
+}
+
+if (!$isLoggedIn) {
+    $navLinks[] = ['title' => 'Login', 'url' => 'login.php'];
+    $navLinks[] = ['title' => 'Register', 'url' => 'register.php', 'class' => 'btn btn-primary btn-sm text-white hover:text-white'];
+}
+
 $navLinks[] = ['title' => 'About', 'url' => 'about.php'];
 if ($isLoggedIn) {
     $navLinks[] = ['title' => 'Logout', 'url' => 'logout.php', 'class' => 'text-accent'];
@@ -96,6 +108,51 @@ $companyName = "Property Portfolio"; // Move this to a config file later
             </div>
 
             <div class="navbar-end">
+                <?php if ($isLoggedIn && hasAnyRole(['super_admin', 'admin'], $currentUser)): ?>
+                    <?php
+                        // Check for pending leads and new enquiries
+                        $pendingLeadsCount = 0;
+                        $newEnquiriesCount = 0;
+                        try {
+                            // Leads
+                            $leadSql = "SELECT COUNT(*) FROM leads WHERE status = 'pending'";
+                            if (!hasAnyRole(['super_admin'], $currentUser)) {
+                                $leadSql .= " AND organization_id = " . intval($currentUser['organization_id']);
+                            }
+                            $leadResult = $connection->query($leadSql);
+                            if ($leadResult) {
+                                $pendingLeadsCount = $leadResult->fetch_row()[0];
+                            }
+
+                            // Enquiries
+                            $enqSql = "SELECT COUNT(*) FROM enquiries WHERE status = 'new'";
+                            if (!hasAnyRole(['super_admin'], $currentUser)) {
+                                $enqSql .= " AND organization_id = " . intval($currentUser['organization_id']);
+                            }
+                            $enqResult = $connection->query($enqSql);
+                            if ($enqResult) {
+                                $newEnquiriesCount = $enqResult->fetch_row()[0];
+                            }
+                        } catch (Exception $e) {
+                            error_log("Notification count error: " . $e->getMessage());
+                        }
+                    ?>
+                    <div class="flex items-center gap-1">
+                        <a href="manage_leads.php" class="btn btn-ghost btn-circle relative tooltip tooltip-bottom" data-tip="Bounty Leads">
+                            <i class="fas fa-coins text-xl"></i>
+                            <?php if ($pendingLeadsCount > 0): ?>
+                                <span class="badge badge-secondary badge-xs absolute top-2 right-2 p-1.5 animate-pulse"><?= $pendingLeadsCount ?></span>
+                            <?php endif; ?>
+                        </a>
+                        <a href="manage_enquiries.php" class="btn btn-ghost btn-circle relative tooltip tooltip-bottom" data-tip="Property Enquiries">
+                            <i class="fas fa-envelope text-xl"></i>
+                            <?php if ($newEnquiriesCount > 0): ?>
+                                <span class="badge badge-primary badge-xs absolute top-2 right-2 p-1.5 animate-pulse"><?= $newEnquiriesCount ?></span>
+                            <?php endif; ?>
+                        </a>
+                    </div>
+                <?php endif; ?>
+
                 <!-- Mobile Menu Toggle Button -->
                 <div class="dropdown dropdown-end lg:hidden">
                     <button tabindex="0" class="btn btn-ghost" aria-label="Navigation menu">

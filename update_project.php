@@ -38,9 +38,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $date = $_POST['project_date'];
         $type = sanitizeInput($_POST['project_type']);
         $status = sanitizeInput($_POST['project_status']);
+        $price = sanitizeInput($_POST['price']);
+        $bounty_info = sanitizeInput($_POST['bounty_info']);
+        $amenities = $_POST['amenities'];
+        $perks = $_POST['perks'];
 
-        $stmt = $connection->prepare("UPDATE projects SET project_name = ?, project_description = ?, project_location = ?, project_date = ?, project_type = ?, project_status = ? WHERE project_id = ?");
-        $stmt->bind_param("ssssssi", $name, $desc, $loc, $date, $type, $status, $projectId);
+        $stmt = $connection->prepare("UPDATE projects SET project_name = ?, project_description = ?, project_location = ?, project_date = ?, project_type = ?, project_status = ?, price = ?, bounty_info = ?, amenities = ?, perks = ? WHERE project_id = ?");
+        $stmt->bind_param("ssssssssssi", $name, $desc, $loc, $date, $type, $status, $price, $bounty_info, $amenities, $perks, $projectId);
         $stmt->execute();
         $stmt->close();
         

@@ -35,6 +35,31 @@ $stmt->execute();
 $result = $stmt->get_result();
 $project = $result->fetch_assoc();
 
+// --- Visit Tracking Logic ---
+if ($project) {
+    // Prevent double counting within same session for same project
+    if (!isset($_SESSION['viewed_projects'])) {
+        $_SESSION['viewed_projects'] = [];
+    }
+
+    if (!in_array($projectId, $_SESSION['viewed_projects'])) {
+        // 1. Increment total view count in projects table
+        $connection->query("UPDATE projects SET views = views + 1 WHERE project_id = " . $projectId);
+        
+        // 2. Record detailed visit (with basic security)
+        $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+        $ua = $_SERVER['HTTP_USER_AGENT'] ?? 'Unknown';
+        
+        $visitStmt = $connection->prepare("INSERT INTO project_visits (project_id, ip_address, user_agent) VALUES (?, ?, ?)");
+        $visitStmt->bind_param("iss", $projectId, $ip, $ua);
+        $visitStmt->execute();
+        $visitStmt->close();
+        
+        // Mark as viewed in session
+        $_SESSION['viewed_projects'][] = $projectId;
+    }
+}
+
 // Separate query for carousel images
 $carouselImages = [];
 if ($project) {
@@ -134,10 +159,10 @@ function formatDate($dateString, $format = 'F Y') {
                                     <?php echo safeOutput($project['project_location'], 'Location not provided'); ?>
                                 </p>
                             </div>
-                            <?php if (!empty($project['price_range'])): ?>
+                            <?php if (!empty($project['price'])): ?>
                                 <div class="bg-primary/10 px-6 py-3 rounded-2xl border border-primary/20">
                                     <span class="text-3xl font-black text-primary">
-                                        <?php echo htmlspecialchars($project['price_range']); ?>
+                                        <?php echo htmlspecialchars($project['price']); ?>
                                     </span>
                                 </div>
                             <?php endif; ?>
@@ -165,11 +190,37 @@ function formatDate($dateString, $format = 'F Y') {
                             <i class="fas fa-info-circle text-primary"></i>
                             Project Overview
                         </h2>
-                        <div class="text-base-content/80 leading-relaxed text-lg">
+                        <div class="text-base-content/80 leading-relaxed text-lg mb-8">
                             <?php if (!empty($project['project_description'])): ?>
                                 <?php echo nl2br(safeOutput($project['project_description'])); ?>
                             <?php else: ?>
                                 <p class="italic opacity-50">No description available for this project.</p>
+                            <?php endif; ?>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <?php if (!empty($project['amenities'])): ?>
+                            <div>
+                                <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
+                                    <i class="fas fa-list-ul text-primary"></i>
+                                    Amenities
+                                </h3>
+                                <div class="text-base-content/70">
+                                    <?php echo nl2br(safeOutput($project['amenities'])); ?>
+                                </div>
+                            </div>
+                            <?php endif; ?>
+
+                            <?php if (!empty($project['perks'])): ?>
+                            <div>
+                                <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
+                                    <i class="fas fa-star text-primary"></i>
+                                    Perks & Features
+                                </h3>
+                                <div class="text-base-content/70">
+                                    <?php echo nl2br(safeOutput($project['perks'])); ?>
+                                </div>
+                            </div>
                             <?php endif; ?>
                         </div>
                     </div>
@@ -239,6 +290,7 @@ function formatDate($dateString, $format = 'F Y') {
                         <div class="space-y-4">
                             <?php 
                             $details = [
+                                ['icon' => 'fa-tag', 'label' => 'Price', 'value' => $project['price'] ?? null],
                                 ['icon' => 'fa-bed', 'label' => 'Bedrooms', 'value' => $project['bedrooms'] ?? null],
                                 ['icon' => 'fa-bath', 'label' => 'Bathrooms', 'value' => $project['bathrooms'] ?? null],
                                 ['icon' => 'fa-ruler-combined', 'label' => 'Square Footage', 'value' => !empty($project['square_footage']) ? $project['square_footage'] . ' sqft' : null],
@@ -260,14 +312,35 @@ function formatDate($dateString, $format = 'F Y') {
                     </div>
 
                     <!-- CTA / Action Card -->
-                    <div class="card bg-primary text-primary-content shadow-2xl">
+                    <div class="card bg-primary text-primary-content shadow-2xl mb-6">
                         <div class="card-body p-8 text-center">
                             <h3 class="text-2xl font-black mb-2">Interested?</h3>
                             <p class="opacity-80 mb-6">Contact the organization directly to learn more about this property.</p>
-                            <a href="contact.php" class="btn btn-neutral btn-lg rounded-full w-full shadow-lg">
+                            <button onclick="document.getElementById('modal-enquiry').showModal()" class="btn btn-neutral btn-lg rounded-full w-full shadow-lg">
                                 Send Inquiry
                                 <i class="fas fa-paper-plane ml-2"></i>
-                            </a>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Bounty System Card -->
+                    <div class="card bg-secondary text-secondary-content shadow-xl">
+                        <div class="card-body p-8 text-center">
+                            <div class="flex justify-center mb-4">
+                                <div class="bg-white/20 p-4 rounded-full">
+                                    <i class="fas fa-coins text-4xl"></i>
+                                </div>
+                            </div>
+                            <h3 class="text-2xl font-black mb-2">Refer & Earn!</h3>
+                            <div class="badge badge-outline badge-white mb-4 p-4 font-bold">
+                                <i class="fas fa-gift mr-2"></i>
+                                <?= htmlspecialchars($project['bounty_info'] ?: 'Rewards available') ?>
+                            </div>
+                            <p class="opacity-80 mb-6 text-sm">Know someone interested in this property? Provide their contact info and get rewarded if the deal closes!</p>
+                            <button onclick="document.getElementById('modal-bounty').showModal()" class="btn btn-white btn-outline btn-lg rounded-full w-full shadow-lg hover:bg-white hover:text-secondary">
+                                Submit a Lead
+                                <i class="fas fa-hand-holding-usd ml-2"></i>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -312,6 +385,123 @@ function formatDate($dateString, $format = 'F Y') {
                 <form method="dialog" class="modal-backdrop bg-black/90"><button>close</button></form>
             </dialog>
 
+            <!-- Bounty/Lead Modal -->
+            <dialog id="modal-bounty" class="modal">
+                <div class="modal-box max-w-2xl border-t-8 border-secondary">
+                    <div class="flex justify-between items-start mb-6">
+                        <div>
+                            <h3 class="font-black text-3xl text-secondary">Referral Bounty</h3>
+                            <p class="text-base-content/60">Help us find a buyer and get rewarded.</p>
+                        </div>
+                        <form method="dialog">
+                            <button class="btn btn-sm btn-circle btn-ghost">✕</button>
+                        </form>
+                    </div>
+                    
+                    <div id="bounty-status" class="mb-4"></div>
+
+                    <form id="bounty-form" method="POST" class="space-y-6">
+                        <input type="hidden" name="project_id" value="<?php echo safeOutput($projectId); ?>">
+                        <input type="hidden" name="organization_id" value="<?php echo safeOutput($project['organization_id']); ?>">
+
+                        <div class="bg-base-200 p-6 rounded-2xl border border-base-300">
+                            <h4 class="font-bold mb-4 flex items-center gap-2">
+                                <i class="fas fa-user-tag text-secondary"></i>
+                                Your Information (Referrer)
+                            </h4>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div class="form-control">
+                                    <label class="label"><span class="label-text font-semibold">Full Name</span></label>
+                                    <input type="text" name="referrer_name" placeholder="Your Name" class="input input-bordered w-full" required>
+                                </div>
+                                <div class="form-control">
+                                    <label class="label"><span class="label-text font-semibold">Email Address</span></label>
+                                    <input type="email" name="referrer_email" placeholder="your@email.com" class="input input-bordered w-full" required>
+                                </div>
+                                <div class="form-control md:col-span-2">
+                                    <label class="label"><span class="label-text font-semibold">Phone Number</span></label>
+                                    <input type="tel" name="referrer_phone" placeholder="e.g. +254..." class="input input-bordered w-full" required>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-base-200 p-6 rounded-2xl border border-base-300">
+                            <h4 class="font-bold mb-4 flex items-center gap-2">
+                                <i class="fas fa-user-check text-success"></i>
+                                Interested Buyer Details
+                            </h4>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div class="form-control">
+                                    <label class="label"><span class="label-text font-semibold">Buyer Name</span></label>
+                                    <input type="text" name="buyer_name" placeholder="Lead's Full Name" class="input input-bordered w-full" required>
+                                </div>
+                                <div class="form-control">
+                                    <label class="label"><span class="label-text font-semibold">Buyer Contact (Phone/Email)</span></label>
+                                    <input type="text" name="buyer_contact" placeholder="Phone or Email" class="input input-bordered w-full" required>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="alert alert-warning text-sm">
+                            <i class="fas fa-info-circle"></i>
+                            <span>You will be contacted if the deal closes successfully. Reward amounts are determined by the organization based on the deal value.</span>
+                        </div>
+
+                        <div class="modal-action">
+                            <button type="button" class="btn btn-ghost" onclick="document.getElementById('modal-bounty').close()">Cancel</button>
+                            <button type="submit" id="bounty-submit-btn" class="btn btn-secondary px-8">
+                                <i class="fas fa-paper-plane mr-2"></i>Submit Lead
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </dialog>
+
+            <script>
+                // Bounty Form Handling
+                document.addEventListener('DOMContentLoaded', () => {
+                    const bountyForm = document.getElementById('bounty-form');
+                    const bountySubmitBtn = document.getElementById('bounty-submit-btn');
+                    const bountyStatus = document.getElementById('bounty-status');
+
+                    if (bountyForm) {
+                        bountyForm.addEventListener('submit', async (e) => {
+                            e.preventDefault();
+                            bountySubmitBtn.disabled = true;
+                            bountySubmitBtn.innerHTML = '<span class="loading loading-spinner"></span> Submitting...';
+                            bountyStatus.innerHTML = '';
+
+                            const formData = new FormData(bountyForm);
+                            
+                            try {
+                                const response = await fetch('process_lead.php', {
+                                    method: 'POST',
+                                    body: formData
+                                });
+                                const result = await response.json();
+
+                                if (result.success) {
+                                    bountyStatus.innerHTML = '<div class="alert alert-success shadow-lg"><i class="fas fa-check-circle"></i><span>' + result.message + '</span></div>';
+                                    bountyForm.reset();
+                                    setTimeout(() => {
+                                        document.getElementById('modal-bounty').close();
+                                        bountyStatus.innerHTML = '';
+                                    }, 3000);
+                                } else {
+                                    bountyStatus.innerHTML = '<div class="alert alert-error shadow-lg"><i class="fas fa-exclamation-triangle"></i><span>' + result.message + '</span></div>';
+                                }
+                            } catch (error) {
+                                bountyStatus.innerHTML = '<div class="alert alert-error shadow-lg"><i class="fas fa-exclamation-triangle"></i><span>An unexpected error occurred. Please try again.</span></div>';
+                                console.error('Error:', error);
+                            } finally {
+                                bountySubmitBtn.disabled = false;
+                                bountySubmitBtn.innerHTML = '<i class="fas fa-paper-plane mr-2"></i>Submit Lead';
+                            }
+                        });
+                    }
+                });
+            </script>
+
             <script>
                 function openImageModal(index) {
                     const modal = document.getElementById('modal-gallery');
@@ -342,9 +532,91 @@ function formatDate($dateString, $format = 'F Y') {
                         }
                     });
                 }
+
+                // Function to handle enquiry form submission
+                document.addEventListener('DOMContentLoaded', () => {
+                    const enquiryForm = document.getElementById('enquiry-form');
+                    const enquirySubmitBtn = document.getElementById('enquiry-submit-btn');
+                    const enquiryStatus = document.getElementById('enquiry-status');
+
+                    if (enquiryForm) {
+                        enquiryForm.addEventListener('submit', async (e) => {
+                            e.preventDefault();
+                            enquirySubmitBtn.disabled = true;
+                            enquirySubmitBtn.classList.add('loading');
+                            enquiryStatus.innerHTML = ''; // Clear previous status
+
+                            const formData = new FormData(enquiryForm);
+                            
+                            try {
+                                const response = await fetch('process_enquiry.php', {
+                                    method: 'POST',
+                                    body: formData
+                                });
+                                const result = await response.json();
+
+                                if (result.success) {
+                                    enquiryStatus.innerHTML = '<div class="alert alert-success shadow-lg"><i class="fas fa-check-circle"></i><span>' + result.message + '</span></div>';
+                                    enquiryForm.reset();
+                                } else {
+                                    enquiryStatus.innerHTML = '<div class="alert alert-error shadow-lg"><i class="fas fa-exclamation-triangle"></i><span>' + result.message + '</span></div>';
+                                }
+                            } catch (error) {
+                                enquiryStatus.innerHTML = '<div class="alert alert-error shadow-lg"><i class="fas fa-exclamation-triangle"></i><span>An unexpected error occurred. Please try again.</span></div>';
+                                console.error('Error:', error);
+                            } finally {
+                                enquirySubmitBtn.disabled = false;
+                                enquirySubmitBtn.classList.remove('loading');
+                            }
+                        });
+                    }
+                });
             </script>
         <?php endif; ?>
     </div>
 </div>
+
+<!-- Enquiry Modal -->
+<dialog id="modal-enquiry" class="modal modal-bottom sm:modal-middle">
+    <div class="modal-box">
+        <h3 class="font-bold text-lg">Inquire About This Property</h3>
+        <p class="py-4">Fill out the form below and the organization will get back to you shortly.</p>
+        
+        <div id="enquiry-status" class="mb-4"></div>
+
+        <form id="enquiry-form" method="POST">
+            <input type="hidden" name="project_id" value="<?php echo safeOutput($projectId); ?>">
+            <input type="hidden" name="organization_id" value="<?php echo safeOutput($project['organization_id']); ?>">
+            <input type="hidden" name="project_name" value="<?php echo safeOutput($project['project_name']); ?>">
+
+            <div class="form-control mb-4">
+                <label class="label"><span class="label-text">Your Name</span></label>
+                <input type="text" name="name" placeholder="John Doe" class="input input-bordered" required>
+            </div>
+            <div class="form-control mb-4">
+                <label class="label"><span class="label-text">Your Email</span></label>
+                <input type="email" name="email" placeholder="you@example.com" class="input input-bordered" required>
+            </div>
+            <div class="form-control mb-4">
+                <label class="label"><span class="label-text">Your Phone (Optional)</span></label>
+                <input type="tel" name="phone" placeholder="+1234567890" class="input input-bordered">
+            </div>
+            <div class="form-control mb-4">
+                <label class="label"><span class="label-text">Subject</span></label>
+                <input type="text" name="subject" value="Inquiry about <?php echo safeOutput($project['project_name']); ?>" class="input input-bordered" required>
+            </div>
+            <div class="form-control mb-4">
+                <label class="label"><span class="label-text">Message</span></label>
+                <textarea name="message" class="textarea textarea-bordered h-24" placeholder="I am interested in this property..." required></textarea>
+            </div>
+            <div class="modal-action">
+                <button type="button" class="btn" onclick="document.getElementById('modal-enquiry').close()">Cancel</button>
+                <button type="submit" id="enquiry-submit-btn" class="btn btn-primary">
+                    <i class="fas fa-paper-plane mr-2"></i>Send Inquiry
+                </button>
+            </div>
+        </form>
+    </div>
+</dialog>
 
 <?php include 'footer.php'; ?>

@@ -12,7 +12,7 @@ if (isset($_GET['org_id']) && is_numeric($_GET['org_id'])) {
 
     // Fetch organization details
     try {
-        $stmt = $connection->prepare("SELECT organization_id, organization_name, created_at FROM organizations WHERE organization_id = ?");
+        $stmt = $connection->prepare("SELECT * FROM organizations WHERE organization_id = ?");
         $stmt->bind_param("i", $orgId);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -49,9 +49,15 @@ if (isset($_GET['org_id']) && is_numeric($_GET['org_id'])) {
         <div class="bg-primary text-primary-content py-16">
             <div class="max-w-7xl mx-auto px-4">
                 <div class="flex flex-col md:flex-row items-center gap-8">
-                    <div class="avatar placeholder">
-                        <div class="bg-neutral text-neutral-content rounded-xl w-24 h-24 text-3xl font-bold">
-                            <?= strtoupper(substr($organization['organization_name'], 0, 1)) ?>
+                    <div class="avatar">
+                        <div class="bg-neutral text-neutral-content rounded-xl w-24 h-24 shadow-2xl">
+                            <?php if (!empty($organization['logo_path']) && file_exists($organization['logo_path'])): ?>
+                                <img src="<?= htmlspecialchars($organization['logo_path']) ?>" alt="<?= htmlspecialchars($organization['organization_name']) ?>">
+                            <?php else: ?>
+                                <div class="flex items-center justify-center h-full text-3xl font-bold">
+                                    <?= strtoupper(substr($organization['organization_name'], 0, 1)) ?>
+                                </div>
+                            <?php endif; ?>
                         </div>
                     </div>
                     <div class="text-center md:text-left">
@@ -64,12 +70,84 @@ if (isset($_GET['org_id']) && is_numeric($_GET['org_id'])) {
                             <span class="mx-2 opacity-50">|</span>
                             Member since <?= date('F Y', strtotime($organization['created_at'])) ?>
                         </p>
+                        <?php if (!empty($organization['license_number'])): ?>
+                            <div class="mt-4 badge badge-outline badge-lg text-primary-content border-primary-content/30 py-4 px-6">
+                                <i class="fas fa-id-card mr-2"></i> License: <?= htmlspecialchars($organization['license_number']) ?>
+                            </div>
+                        <?php endif; ?>
                     </div>
                 </div>
             </div>
         </div>
 
         <div class="max-w-7xl mx-auto px-4 py-12">
+            <!-- Organization Info Bar -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+                <?php if (!empty($organization['company_address'])): ?>
+                <div class="card bg-base-100 shadow-sm border border-base-200">
+                    <div class="card-body p-4 flex-row items-center gap-4">
+                        <div class="bg-primary/10 text-primary rounded-xl p-3">
+                            <i class="fas fa-map-marked-alt text-xl"></i>
+                        </div>
+                        <div>
+                            <div class="text-xs font-bold uppercase opacity-50">Location</div>
+                            <div class="text-sm"><?= nl2br(htmlspecialchars($organization['company_address'])) ?></div>
+                        </div>
+                    </div>
+                </div>
+                <?php endif; ?>
+
+                <?php if (!empty($organization['contact_email']) || !empty($organization['contact_phone'])): ?>
+                <div class="card bg-base-100 shadow-sm border border-base-200">
+                    <div class="card-body p-4 flex-row items-center gap-4">
+                        <div class="bg-secondary/10 text-secondary rounded-xl p-3">
+                            <i class="fas fa-headset text-xl"></i>
+                        </div>
+                        <div>
+                            <div class="text-xs font-bold uppercase opacity-50">Contact Info</div>
+                            <div class="text-sm">
+                                <?php if ($organization['contact_email']): ?>
+                                    <a href="mailto:<?= htmlspecialchars($organization['contact_email']) ?>" class="hover:underline block"><?= htmlspecialchars($organization['contact_email']) ?></a>
+                                <?php endif; ?>
+                                <?php if ($organization['contact_phone']): ?>
+                                    <div class="font-bold"><?= htmlspecialchars($organization['contact_phone']) ?></div>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <?php endif; ?>
+
+                <?php if (!empty($organization['website'])): ?>
+                <div class="card bg-base-100 shadow-sm border border-base-200">
+                    <div class="card-body p-4 flex-row items-center gap-4">
+                        <div class="bg-accent/10 text-accent rounded-xl p-3">
+                            <i class="fas fa-globe text-xl"></i>
+                        </div>
+                        <div>
+                            <div class="text-xs font-bold uppercase opacity-50">Official Website</div>
+                            <div class="text-sm">
+                                <a href="<?= htmlspecialchars($organization['website']) ?>" target="_blank" class="link link-primary font-bold">Visit Website</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <?php endif; ?>
+            </div>
+
+            <?php if (!empty($organization['description'])): ?>
+            <div class="card bg-base-100 shadow-sm border border-base-200 mb-12">
+                <div class="card-body">
+                    <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
+                        <i class="fas fa-info-circle text-primary"></i> Company Profile
+                    </h3>
+                    <div class="text-base-content/80 leading-relaxed">
+                        <?= nl2br(htmlspecialchars($organization['description'])) ?>
+                    </div>
+                </div>
+            </div>
+            <?php endif; ?>
+
             <!-- Breadcrumbs -->
             <div class="text-sm breadcrumbs mb-8">
                 <ul>
@@ -118,12 +196,12 @@ if (isset($_GET['org_id']) && is_numeric($_GET['org_id'])) {
                                 </div>
 
                                 <div class="card-actions justify-between items-center mt-auto pt-4 border-t border-base-200">
-                                    <?php if (!empty($project['price_range'])): ?>
+                                    <?php if (!empty($project['price'])): ?>
                                         <div class="text-xl font-bold text-primary">
-                                            <?= htmlspecialchars($project['price_range']) ?>
+                                            <?= htmlspecialchars($project['price']) ?>
                                         </div>
                                     <?php else: ?>
-                                        <div></div>
+                                        <div class="text-xs opacity-50 italic">Price on request</div>
                                     <?php endif; ?>
                                     <a href="project_details.php?id=<?= $project['project_id'] ?>" 
                                        class="btn btn-primary btn-sm rounded-full px-6 shadow-md hover:shadow-lg">

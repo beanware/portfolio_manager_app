@@ -76,38 +76,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = "You must agree to the Terms of Service and Privacy Policy.";
         }
 
-        // Check if username or email already exists in DB
-        // Assign to default organization (ID 1) for registration, or implement an organization selection in the form
-        $registration_org_id = 1; 
+        // Initial registration has no organization
+        $registration_org_id = null; 
 
-        if (empty($errors) && userExists($username, $email, $registration_org_id)) { 
-            $errors[] = "Username or email already registered.";
+        if (empty($errors)) {
+            // Check if user exists globally since we don't have an org yet
+            $stmt = $connection->prepare("SELECT user_id FROM users WHERE username = ? OR email = ?");
+            $stmt->bind_param("ss", $username, $email);
+            $stmt->execute();
+            $stmt->store_result();
+            if ($stmt->num_rows > 0) {
+                $errors[] = "Username or email already registered.";
+            }
+            $stmt->close();
         }
 
         if (empty($errors)) {
-            // Determine role: 'admin' if it's the first user, otherwise 'viewer'
-            // Re-fetch admin count right before registration to prevent race conditions in a multi-user env
-            $stmt = $connection->prepare("SELECT COUNT(*) as admin_count FROM users WHERE role = 'admin' AND organization_id = ?");
-            $stmt->bind_param("i", $registration_org_id);
-            $stmt->execute();
-            $result = $stmt->get_result();
-            $currentAdminCount = $result->fetch_assoc()['admin_count'];
-            $stmt->close();
-
-            $role = ($currentAdminCount == 0) ? 'admin' : 'viewer';
+            // First user is always admin, but here we just assign 'admin' role
+            // so they can create the organization.
+            $role = 'admin'; 
             
-            $registrationResult = registerUser($username, $email, $password, $display_name, $registration_org_id, $role);
-
-            if ($registrationResult['success']) {
-                $success = $registrationResult['message'] . " You can now log in.";
-                // Clear form fields on successful registration
+            // Modified registerUser call or direct insert if registerUser doesn't support NULL org
+            $password_hash = password_hash($password, PASSWORD_DEFAULT);
+            $stmt = $connection->prepare("INSERT INTO users (username, email, password_hash, display_name, role, organization_id) VALUES (?, ?, ?, ?, ?, NULL)");
+            $stmt->bind_param("sssss", $username, $email, $password_hash, $display_name, $role);
+            
+            if ($stmt->execute()) {
+                $success = "Registration successful! You can now log in and set up your organization.";
+                // Clear form fields
                 $username = $email = $display_name = '';
-                // Regenerate CSRF token after successful registration to prevent replay attacks
                 unset($_SESSION['csrf_token']);
                 generateCsrfToken();
             } else {
-                $error = $registrationResult['message'];
+                $error = "Registration failed.";
             }
+            $stmt->close();
         } else {
             $error = implode('<br>', $errors); // Combine all errors into one message
         }

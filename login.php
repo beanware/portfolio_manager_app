@@ -1,9 +1,12 @@
 <?php 
 include 'connection.php';
+include 'includes/google_auth_config.php';
 
 $conn = new mysqli($servername, $username, $password, $dbname);
  // Ensure this file connects to the database
-session_start(); // Start the session
+if (session_status() === PHP_SESSION_NONE) {
+    session_start(); // Start the session
+}
 
 // Check if the form is submitted
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
@@ -90,6 +93,47 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             color: red;
             margin-bottom: 15px;
         }
+        .divider {
+            display: flex;
+            align-items: center;
+            text-align: center;
+            margin: 20px 0;
+            color: #888;
+        }
+        .divider::before, .divider::after {
+            content: '';
+            flex: 1;
+            border-bottom: 1px solid #ddd;
+        }
+        .divider:not(:empty)::before {
+            margin-right: .25em;
+        }
+        .divider:not(:empty)::after {
+            margin-left: .25em;
+        }
+        .google-btn {
+            width: 100%;
+            padding: 10px;
+            background-color: #fff;
+            color: #757575;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            transition: background-color 0.3s ease;
+        }
+        .google-btn:hover {
+            background-color: #f7f7f7;
+        }
+        .google-btn img {
+            width: 20px;
+            height: 20px;
+            margin-right: 10px;
+        }
     </style>
 </head>
 <body>
@@ -99,6 +143,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         // Display error message if there is one
         if (isset($error)) {
             echo "<p class='error'>$error</p>";
+        }
+        if (isset($_GET['error'])) {
+            $msg = "An error occurred during Google authentication.";
+            if ($_GET['error'] == 'google_auth_failed') $msg = "Google authentication failed.";
+            if ($_GET['error'] == 'google_token_failed') $msg = "Failed to obtain token from Google.";
+            if ($_GET['error'] == 'registration_failed') $msg = "Failed to create account.";
+            echo "<p class='error'>$msg</p>";
         }
         ?>
         <form method="POST" action="login.php">
@@ -110,6 +161,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             
             <button type="submit">Login</button>
         </form>
+
+        <div class="divider">OR</div>
+
+        <a href="<?= getGoogleLoginUrl() ?>" class="google-btn">
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google Logo">
+            Continue with Google
+        </a>
     </div>
 </body>
 </html>

@@ -65,13 +65,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
         $projectDate = $_POST['project_date'];
         $projectType = sanitizeInput($_POST['project_type']);
         $projectStatus = sanitizeInput($_POST['project_status'] ?? 'draft');
+        $price = sanitizeInput($_POST['price']);
+        $bounty_info = sanitizeInput($_POST['bounty_info'] ?? 'Contact for details');
+        $amenities = $_POST['amenities'];
+        $perks = $_POST['perks'];
         $targetOrgId = $isSuperAdmin ? intval($_POST['organization_id']) : $organization_id;
 
         if ($projectName) {
             try {
                 $projectSlug = generateSlug($projectName, $connection, $targetOrgId);
-                $stmt = $connection->prepare('INSERT INTO projects (project_name, project_slug, project_description, project_location, project_date, project_type, project_status, organization_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-                $stmt->bind_param("sssssssi", $projectName, $projectSlug, $projectDescription, $projectLocation, $projectDate, $projectType, $projectStatus, $targetOrgId);
+                $stmt = $connection->prepare('INSERT INTO projects (project_name, project_slug, project_description, project_location, project_date, project_type, project_status, price, bounty_info, amenities, perks, organization_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+                $stmt->bind_param("sssssssssssi", $projectName, $projectSlug, $projectDescription, $projectLocation, $projectDate, $projectType, $projectStatus, $price, $bounty_info, $amenities, $perks, $targetOrgId);
                 $stmt->execute();
                 $projectId = $connection->insert_id;
                 $stmt->close();
@@ -342,6 +346,16 @@ $csrfToken = generateCsrfToken();
                     </div>
 
                     <div class="form-control">
+                        <label class="label"><span class="label-text font-bold">Price</span></label>
+                        <input type="text" name="price" class="input input-bordered" placeholder="e.g. KES 5,000,000 or Contact for Price" />
+                    </div>
+
+                    <div class="form-control">
+                        <label class="label"><span class="label-text font-bold text-secondary">Bounty Information</span></label>
+                        <input type="text" name="bounty_info" class="input input-bordered border-secondary/50" placeholder="e.g. KES 50,000 for closed deal" />
+                    </div>
+
+                    <div class="form-control">
                         <label class="label"><span class="label-text font-bold">Date</span></label>
                         <input type="date" name="project_date" class="input input-bordered" />
                     </div>
@@ -362,7 +376,17 @@ $csrfToken = generateCsrfToken();
                 <div class="space-y-4">
                     <div class="form-control">
                         <label class="label"><span class="label-text font-bold">Description</span></label>
-                        <textarea name="project_description" class="textarea textarea-bordered h-32" placeholder="Write about the project..."></textarea>
+                        <textarea name="project_description" class="textarea textarea-bordered h-24" placeholder="Write about the project..."></textarea>
+                    </div>
+
+                    <div class="form-control">
+                        <label class="label"><span class="label-text font-bold">Amenities</span></label>
+                        <textarea name="amenities" class="textarea textarea-bordered h-20" placeholder="e.g. Water, Electricity, Perimeter Fence (one per line or comma separated)"></textarea>
+                    </div>
+
+                    <div class="form-control">
+                        <label class="label"><span class="label-text font-bold">Perks / Land Features</span></label>
+                        <textarea name="perks" class="textarea textarea-bordered h-20" placeholder="e.g. Red soil, 2km from bypass, Ready title deeds"></textarea>
                     </div>
 
                     <div class="form-control">

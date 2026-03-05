@@ -120,6 +120,14 @@ $csrfToken = generateCsrfToken();
 
                             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <div class="form-control">
+                                    <label class="label"><span class="label-text font-bold">Price</span></label>
+                                    <input type="text" name="price" value="<?= htmlspecialchars($project['price'] ?? '') ?>" class="input input-bordered" placeholder="e.g. KES 5M" />
+                                </div>
+                                <div class="form-control">
+                                    <label class="label"><span class="label-text font-bold text-secondary">Bounty Information</span></label>
+                                    <input type="text" name="bounty_info" value="<?= htmlspecialchars($project['bounty_info'] ?? 'Contact for details') ?>" class="input input-bordered border-secondary/50" />
+                                </div>
+                                <div class="form-control">
                                     <label class="label"><span class="label-text font-bold">Type</span></label>
                                     <select name="project_type" class="select select-bordered">
                                         <?php foreach ($projectTypes as $type): ?>
@@ -143,7 +151,18 @@ $csrfToken = generateCsrfToken();
 
                             <div class="form-control">
                                 <label class="label"><span class="label-text font-bold">Description</span></label>
-                                <textarea name="project_description" class="textarea textarea-bordered h-48"><?= htmlspecialchars($project['project_description']) ?></textarea>
+                                <textarea name="project_description" class="textarea textarea-bordered h-32"><?= htmlspecialchars($project['project_description']) ?></textarea>
+                            </div>
+
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div class="form-control">
+                                    <label class="label"><span class="label-text font-bold">Amenities</span></label>
+                                    <textarea name="amenities" class="textarea textarea-bordered h-32" placeholder="e.g. Water, Electricity..."><?= htmlspecialchars($project['amenities'] ?? '') ?></textarea>
+                                </div>
+                                <div class="form-control">
+                                    <label class="label"><span class="label-text font-bold">Perks / Features</span></label>
+                                    <textarea name="perks" class="textarea textarea-bordered h-32" placeholder="e.g. Red soil, Title deeds..."><?= htmlspecialchars($project['perks'] ?? '') ?></textarea>
+                                </div>
                             </div>
 
                             <div class="card-actions justify-end mt-6">

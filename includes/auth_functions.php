@@ -82,6 +82,22 @@ function requireAuth($redirectTo = 'login.php') {
         $redirect = urlencode($_SERVER['REQUEST_URI'] ?? 'index.php');
         safeRedirect("{$redirectTo}?redirect={$redirect}");
     }
+    
+    // Check if user has an organization (except for create_organization page)
+    $currentPage = basename($_SERVER['PHP_SELF']);
+    if ($currentPage !== 'create_organization.php' && $currentPage !== 'logout.php') {
+        enforceOrganization();
+    }
+}
+
+/**
+ * Enforce that the user has an organization ID
+ */
+function enforceOrganization() {
+    $user = getCurrentUser();
+    if ($user && empty($user['organization_id'])) {
+        safeRedirect('create_organization.php');
+    }
 }
 
 /**
@@ -201,22 +217,28 @@ function validatePasswordStrength($password) {
 /**
  * Log user activity for security audit
  */
-function logActivity($action, $entity = null, $entityId = null) {
+function logActivity($action, $entity = null, $entityId = null, $details = null) {
     global $connection; // Assuming $connection is available
     
     $user = getCurrentUser();
     $userId = $user ? $user['id'] : null;
+    $orgId = $user ? $user['organization_id'] : null;
     
     $ipAddress = $_SERVER['REMOTE_ADDR'] ?? 'Unknown';
     $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? 'Unknown';
     
+    // Ensure details is a string if it's an array/object
+    if (is_array($details) || is_object($details)) {
+        $details = json_encode($details);
+    }
+    
     try {
         $stmt = $connection->prepare("
-            INSERT INTO audit_log (user_id, action, entity_type, entity_id, ip_address, user_agent, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, NOW())
+            INSERT INTO audit_log (user_id, organization_id, action, entity_type, entity_id, ip_address, user_agent, details, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
         ");
         
-        $stmt->bind_param("ississ", $userId, $action, $entity, $entityId, $ipAddress, $userAgent);
+        $stmt->bind_param("iissssss", $userId, $orgId, $action, $entity, $entityId, $ipAddress, $userAgent, $details);
         $stmt->execute();
         $stmt->close();
     } catch (Exception $e) {
