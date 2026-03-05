@@ -4,8 +4,8 @@
  */
 
 // Replace these with your actual Google OAuth credentials
-define('GOOGLE_CLIENT_ID', '714040254600-jpuioqlaimh2sh6rqme83ftuejqkmks0.apps.googleusercontent.com');
-define('GOOGLE_CLIENT_SECRET', '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');
+define('GOOGLE_CLIENT_ID', '');
+define('GOOGLE_CLIENT_SECRET', '');
 
 // Determine the base URL dynamically
 $protocol = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? "https" : "http";
